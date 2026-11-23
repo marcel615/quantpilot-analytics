@@ -1,0 +1,52 @@
+schema_version: 2
+active_service: quantpilot
+
+services:
+  quantpilot:
+    repositories:
+      analytics:
+        enabled: true
+        repository: marcel615/quantpilot-analytics
+        default_branch: develop
+      common:
+        enabled: true
+        repository: marcel615/quantpilot-specs
+        default_branch: main
+
+    work_tracking:
+      provider: jira
+
+    jira:
+      site_url: https://marcel615.atlassian.net
+      project_key: QP
+      issue_types:
+        implementation: Task
+      statuses:
+        backlog: 할 일
+        ready: 착수 가능
+        in_progress: 진행 중
+        in_review: 검토 중
+        done: 완료
+      role_labels:
+        analytics: 'area:analytics'
+        specs: 'area:specs'
+      priority_order: [Highest, High, Medium, Low, Lowest]
+
+    requirements:
+      repository_role: common
+      path: docs/requirements.md
+      format: markdown
+
+    contracts:
+      analytics:
+        repository_role: common
+        path: docs/analytics-spec.md
+        format: markdown
+
+    development:
+      branch_pattern: 'codex/작업키-작업명'
+      branch_prefix: 'codex/'
+      protected_branches:
+        - develop
+        - main
+      # 실행 환경과 테스트가 마련되면 실제 검증 명령을 설정한다.
