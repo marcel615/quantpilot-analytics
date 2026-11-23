@@ -164,7 +164,8 @@ def write_artifacts(directory, result):
 def publish(query, result, root=ROOT):
     identity = "-".join((query.start.isoformat(), query.end.isoformat(),
                          ",".join(query.symbols)))
-    request_dir = root / hashlib.sha256(identity.encode()).hexdigest()
+    # Keep the request directory short enough for nested Windows worktrees.
+    request_dir = root / hashlib.blake2b(identity.encode(), digest_size=16).hexdigest()
     generation = uuid4().hex
     directory = request_dir / generation
     directory.mkdir(parents=True)
