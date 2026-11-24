@@ -30,6 +30,8 @@ python -m unittest discover -s tests -v
 
 ## 일봉 수익률 예측 실험
 
+이전 실험의 학습 데이터, 평가 기준, 결과는 [예측 모델 실험 기록](docs/forecast-experiments.md)에 있다.
+
 [QP-8](https://marcel615.atlassian.net/browse/QP-8)은 NVDA·SPY의 2024년 IEX 일봉으로 뉴욕 장 마감 시점의 다음 거래일 수익률을 예측한다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/9ca53e9ed4f327d0b293bf43709f09a273be09fd/docs/analytics-spec.md#첫-일봉-기반-수익률-예측-실험)를 따른다.
 
 Python 3.12에서 `python -m pip install -r requirements.txt`를 실행하고 위 수집 절차와 같은 Alpaca 자격 증명 및 시간대 데이터를 사용한다.
