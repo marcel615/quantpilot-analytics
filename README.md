@@ -27,3 +27,20 @@ python -m unittest discover -s tests -v
 ```
 
 네트워크나 계정 없이 합성 응답으로 페이지 처리, 정제·재실행, 분할 수용 검증, 배당 제외, 산출물 저장과 실패 시 직전 결과 보존을 확인한다.
+
+## 일봉 수익률 예측 실험
+
+[QP-8](https://marcel615.atlassian.net/browse/QP-8)은 NVDA·SPY의 2024년 IEX 일봉으로 뉴욕 장 마감 시점의 다음 거래일 수익률을 예측한다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/9ca53e9ed4f327d0b293bf43709f09a273be09fd/docs/analytics-spec.md#첫-일봉-기반-수익률-예측-실험)를 따른다.
+
+Python 3.12에서 `python -m pip install -r requirements.txt`를 실행하고 위 수집 절차와 같은 Alpaca 자격 증명 및 시간대 데이터를 사용한다.
+
+```text
+python -m forecast train
+python -m forecast predict --history-start 2024-11-01 --as-of 2025-01-02
+```
+
+학습 명령은 실제 가격 파일을 저장하지 않고 정제 일봉을 메모리에서 처리한다. 1–9월 표본으로 전처리와 모델을 적합하고, 10월 MAE로 리지 설정을 고른 뒤, 11–12월의 유효 행에서 0% 기준선과 비교한다. 리지 후보는 0.01, 0.1, 1, 10, 100이고, 동점이면 작은 값을 고른다. 오차 차이는 리지 MAE에서 기준선 MAE를 뺀 값이다.
+
+모델과 재현 기록은 개인 환경의 `.local/forecast/model.json`에 저장된다. 예측 명령은 이 파일에서 모델을 읽고 지정한 기준일까지 확보한 이력으로 종목별 다음 거래일 예상 수익률을 JSON으로 출력한다. 수익률 0.01은 1%를 뜻한다. `--history-start`는 기준일 이전에 최소 20개 거래일을 포함하도록 설정한다.
+
+`python -m unittest discover -s tests -v`는 합성 일봉으로 특징·목표 계산, 시간순 구간 경계, 평가 데이터 누출 방지 및 저장 모델 예측을 검증한다.

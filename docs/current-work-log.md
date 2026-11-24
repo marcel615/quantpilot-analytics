@@ -1,11 +1,15 @@
 # Current Work Log
 
-## 2026-11-24 — QP-2 금융 데이터 수집 기반 구축
+## 2026-11-24 — QP-8 일봉 기반 주가 예측 모델 학습 및 검증
 
-- 작업 브랜치는 `codex/QP-2-price-data-ingestion`이며 기준은 `d0b6367bac47d85d20cfb0321b3d61380549c5af`다.
-- Alpaca Paper 달력과 IEX 일봉의 원가격·분할조정 가격을 검증하고, 성공 실행만 `latest`로 공개한다.
-- Python 3.12.14에서 `python -m unittest discover -s tests -v` 8건 통과. 실제 IEX NVDA·SPY 2024년 일봉 504행과 NVDA 분할 전후 조건을 저장 없이 확인했다.
-- 합성 입력으로 기본 저장 경로의 산출물, Git 무시, 배포용 Git 아카이브 제외를 확인했다.
-- 독립 리뷰의 HTTP 응답 중단 처리와 SPY 배당락 검증을 수정했다. Windows 저장 경로를 줄인 뒤 재검증하고 독립 재검토를 완료했다.
-- [Analytics PR #2](https://github.com/marcel615/quantpilot-analytics/pull/2)를 [QP-2](https://marcel615.atlassian.net/browse/QP-2)에 연결하고 Jira 검토 중 상태를 재조회했다.
-- 실제 가격 파일의 지속 저장은 계정 보관 조건 확인 후 별도로 검증한다. PR 머지는 사용자 검토 후 진행한다.
+- QP-2 완료와 devlog를 확인했다. QP-9의 분석 기준은 Specs `main`의 `9ca53e9ed4f327d0b293bf43709f09a273be09fd`에서 확인했다.
+- 기준 브랜치는 `develop`의 `6eb45de57b1205fb569075cdf4db4278e06b55fa`, 작업 브랜치는 `codex/QP-8-forecast-model-experiment`다.
+- 사용자가 기존 테스트 명령의 설정 등록을 승인했다. Python 3.12.14에서 착수 전 기존 테스트 8건이 통과했다.
+- Jira QP-8을 진행 중으로 전환하고 재조회했다. 설계 기준과 수용 조건은 current-task에 기록했다.
+
+- Python 3.12.14와 NumPy 2.3.5에서 합성 및 기존 수집 테스트를 실행했다.
+- 실제 IEX NVDA·SPY 2024년 504행을 메모리에서 검증했다. 입력 SHA-256, 평가 예측 및 MAE를 재현하고 저장 모델로 2025-01-02 두 종목의 예측을 확인했다.
+- 학습 334행, 검증 44행, 최종 평가 80행. 0% 기준선 MAE 0.0122974474, 리지 MAE 0.0128804021, 차이 +0.0005829548. 검증에서 선택한 alpha는 0.01이다.
+
+- 자체 리뷰와 독립 리뷰를 완료했다. 뉴욕 장 마감 전 부분 일봉 사용과 소수 상수열 표준화 오차를 수정했으며, 독립 재검토에서 추가 필수 지적은 없었다.
+- 수정 후 `python -m unittest discover -s tests -v` 15개 통과. 실제 표본 재현과 저장 모델 예측을 재검증하고 IEX 거래일 달력의 조기 마감 시각으로 마감 가드를 확인했다.
