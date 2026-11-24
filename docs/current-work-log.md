@@ -13,3 +13,4 @@
 
 - 자체 리뷰와 독립 리뷰를 완료했다. 뉴욕 장 마감 전 부분 일봉 사용과 소수 상수열 표준화 오차를 수정했으며, 독립 재검토에서 추가 필수 지적은 없었다.
 - 수정 후 `python -m unittest discover -s tests -v` 15개 통과. 실제 표본 재현과 저장 모델 예측을 재검증하고 IEX 거래일 달력의 조기 마감 시각으로 마감 가드를 확인했다.
+- [Analytics PR #3](https://github.com/marcel615/quantpilot-analytics/pull/3)를 QP-8에 웹 링크로 연결하고 검토 중으로 전환했다. devlog를 반영한 최종 PR 커밋을 기준으로 GitHub 체크와 보호 조건을 확인한다.
