@@ -35,6 +35,89 @@ def sample(count=10, candidate_change="0.05"):
 
 
 class DownsideTests(unittest.TestCase):
+    def test_allocation_comparison_freezes_distinct_etfs_and_matches_hand_calculation(self):
+        closes, days = sample()
+        count = len(days) - 2
+        closes = {
+            symbol: dict(zip(days, prices_from_returns("100", [selection, *([validation] * count)])))
+            for symbol, selection, validation in (
+                ("NVDA", "-0.07", "-0.10"), ("SPY", "-0.01", "0.02"),
+                ("AAA", "0.05", "0.05"), ("BBB", "0.05", "-0.01"), ("CCC", "0.04", "0.50"),
+            )
+        }
+        holdings = parse_holdings(["NVDA=50", "SPY=50"])
+        candidates = ("CCC", "BBB", "AAA")
+        result = compare(closes, days, candidates, holdings, allocation_comparison=True)
+
+        self.assertEqual(result["status"], "comparison_complete")
+        self.assertEqual(result["selected_etfs"], {
+            "portfolio": "AAA", "individual": {"NVDA": "AAA", "SPY": "BBB"},
+        })
+        self.assertEqual(result["validation"]["downside_days"], 10)
+        allocations = result["validation"]["allocations"]
+        for name, expected in (("cash", -0.032), ("portfolio", -0.022), ("individual", -0.028)):
+            with self.subTest(name=name):
+                self.assertEqual(allocations[name]["downside_mean_return"], expected)
+                self.assertEqual(allocations[name]["downside_worst_return"], expected)
+                self.assertAlmostEqual(allocations[name]["cumulative_return"], (1 + expected) ** 10 - 1)
+                self.assertAlmostEqual(allocations[name]["maximum_drawdown"], 1 - (1 + expected) ** 10)
+        self.assertEqual(allocations["portfolio"]["downside_excess_over_cash_pp"], 1)
+        self.assertEqual(allocations["individual"]["downside_excess_over_cash_pp"], 0.4)
+
+        del closes["CCC"][days[3]]
+        ignored_gap = compare(closes, days[:-1], candidates, holdings, allocation_comparison=True)
+        self.assertEqual(ignored_gap["status"], "insufficient_sample")
+        self.assertEqual(ignored_gap["selected_etfs"], result["selected_etfs"])
+        self.assertEqual(ignored_gap["selection"], result["selection"])
+
+        del closes["BBB"][days[3]]
+        blocked = compare(closes, days, candidates, holdings, allocation_comparison=True)
+        self.assertEqual(blocked["selected_etfs"], result["selected_etfs"])
+        self.assertEqual(blocked["missing_validation_dates"], {"BBB": [days[3].isoformat()]})
+        self.assertIsNone(blocked["validation"])
+
+    def test_allocation_comparison_scores_each_reference_on_its_own_downside_day(self):
+        days = [date(2025, 12, 26), date(2025, 12, 29), PREVIOUS, ANCHOR, FIRST_VALIDATION]
+        closes = {
+            symbol: dict(zip(days, prices_from_returns("100", returns)))
+            for symbol, returns in {
+                "NVDA": ("-0.10", "0.10", "-0.06", "-0.10"),
+                "SPY": ("0.12", "-0.10", "-0.06", "-0.10"),
+                "AAA": ("0.20", "0", "0", "0"),
+                "BBB": ("0", "0.15", "0", "0"),
+                "CCC": ("0", "0", "0.10", "0"),
+            }.items()
+        }
+        holdings = parse_holdings(["NVDA=50", "SPY=50"])
+        result = compare(closes, days, ("AAA", "BBB", "CCC"), holdings, allocation_comparison=True)
+        self.assertEqual(result["selected_etfs"], {
+            "portfolio": "CCC", "individual": {"NVDA": "AAA", "SPY": "BBB"},
+        })
+        self.assertEqual([result["selection"][name]["downside_threshold"]
+                          for name in ("NVDA", "SPY", "portfolio")], [-0.10, -0.10, -0.06])
+
+    def test_allocation_comparison_cli_rejects_changes_to_the_official_experiment(self):
+        candidates = ["QQQ", "XLP", "XLU", "IEF", "SHY", "GLD", "UUP"]
+        for args in (
+            ["--candidates", "GLD", "--end", "2026-11-24"],
+            ["--candidates", *candidates, "--end", "2026-11-25"],
+            ["--candidates", *candidates, "--end", "2026-11-24", "--holdings", "NVDA=40", "SPY=60"],
+        ):
+            with self.subTest(args=args), redirect_stderr(StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as error:
+                    main(["--compare-allocations", *args])
+                self.assertEqual(error.exception.code, 2)
+                self.assertIn("--compare-allocations", stderr.getvalue())
+
+    def test_allocation_comparison_requires_two_eligible_etfs(self):
+        closes, days = sample()
+        closes["SPY"] = dict(zip(days, prices_from_returns("100", ["-0.02"] * (len(days) - 1))))
+        holdings = parse_holdings(["NVDA=50", "SPY=50"])
+        result = compare(closes, days, ("AAA",), holdings, allocation_comparison=True)
+        self.assertEqual(result["status"], "no_suitable_candidate")
+        self.assertEqual(result["reason"], "fewer_than_two_eligible_candidates")
+        self.assertIsNone(result["selected_etfs"])
+
     def test_portfolio_returns_set_the_threshold_and_keep_validation_separate(self):
         closes, days = sample()
         closes["SPY"] = dict(zip(days, prices_from_returns("100", ["0.02"] * (len(days) - 1))))

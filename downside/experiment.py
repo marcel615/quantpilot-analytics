@@ -136,7 +136,105 @@ def compare_period(closes, symbols, days, threshold, holding):
     }
 
 
-def compare(closes, calendar, candidates, holdings=None):
+def exact_returns(prices, days):
+    return [Fraction(prices[current]) / Fraction(prices[previous]) - 1
+            for previous, current in zip(days, days[1:])]
+
+
+def downside_indices(returns, threshold):
+    return [index for index, change in enumerate(returns) if change < 0 and change <= threshold]
+
+
+def downside_threshold(returns):
+    return sorted(returns)[(len(returns) - 1) // 10]
+
+
+def compare_allocations(closes, selection, validation, eligible, holdings, report):
+    scopes = (*holdings, "portfolio")
+    references = {symbol: exact_returns(closes[symbol], selection) for symbol in holdings}
+    references["portfolio"] = portfolio_returns(closes, selection, holdings)
+    thresholds = {scope: downside_threshold(references[scope]) for scope in scopes}
+    dates = {scope: downside_indices(references[scope], thresholds[scope]) for scope in scopes}
+    report["downside_threshold"] = float(thresholds["portfolio"])
+    report["selection"] = {
+        scope: {"downside_threshold": float(thresholds[scope]), "downside_days": len(dates[scope])}
+        for scope in scopes
+    }
+    if any(not indices for indices in dates.values()):
+        report["reason"] = "no_selection_downside_days"
+        return report
+    if len(eligible) < 2:
+        report["status"] = "no_suitable_candidate"
+        if any(result["selection_missing_dates"] for result in report["candidates"].values()):
+            report["status"] = "insufficient_data"
+        report["reason"] = "fewer_than_two_eligible_candidates"
+        return report
+
+    symbols = sorted(eligible)
+    returns = {symbol: exact_returns(closes[symbol], selection) for symbol in symbols}
+    scores = {scope: {symbol: average_on(returns[symbol], dates[scope]) for symbol in symbols}
+              for scope in scopes}
+    first, second = holdings
+    portfolio_etf = max(symbols, key=scores["portfolio"].__getitem__)
+    pairs = ((left, right) for left in symbols for right in symbols if left != right)
+    pair = max(pairs, key=lambda pair: scores[first][pair[0]] + scores[second][pair[1]])
+    report["selected_etfs"] = {
+        "portfolio": portfolio_etf,
+        "individual": dict(zip(holdings, pair)),
+    }
+
+    days = [selection[-1], *validation]
+    required = dict.fromkeys((*holdings, portfolio_etf, *pair))
+    missing = {symbol: missing_dates(closes[symbol], days) for symbol in required}
+    report["missing_validation_dates"] = {symbol: gaps for symbol, gaps in missing.items() if gaps}
+    if report["missing_validation_dates"]:
+        report["reason"] = "missing_validation_prices"
+        return report
+
+    reference = portfolio_returns(closes, days, holdings)
+    downside = downside_indices(reference, thresholds["portfolio"])
+    upside = [index for index, change in enumerate(reference) if change > 0]
+    cash = [Fraction(HOLDING_WEIGHT) * change for change in reference]
+    allocations = {
+        "cash": cash,
+        "portfolio": add_etfs(cash, closes, days, (portfolio_etf,)),
+        "individual": add_etfs(cash, closes, days, pair),
+    }
+    report["validation"] = {
+        "first_return_date": days[1].isoformat(),
+        "last_return_date": days[-1].isoformat(),
+        "downside_days": len(downside),
+        "allocations": {name: comparison_metrics(values, cash, downside, upside)
+                        for name, values in allocations.items()},
+    }
+    report["validation_sample_sufficient"] = len(downside) >= MIN_DOWNSIDE_DAYS
+    if report["validation_sample_sufficient"]:
+        report["status"] = "comparison_complete"
+    else:
+        report["status"] = "insufficient_sample"
+        report["reason"] = "too_few_validation_downside_days"
+    return report
+
+
+def add_etfs(cash, closes, days, symbols):
+    weight = Fraction(CANDIDATE_WEIGHT) / len(symbols)
+    candidate_returns = [exact_returns(closes[symbol], days) for symbol in symbols]
+    return [core + weight * sum(changes) for core, *changes in zip(cash, *candidate_returns)]
+
+
+def comparison_metrics(returns, cash, downside, upside):
+    decimal_returns = [Decimal(value.numerator) / Decimal(value.denominator) for value in returns]
+    exact_mean = average_on(returns, downside)
+    cash_mean = average_on(cash, downside)
+    return {
+        **allocation_metrics(decimal_returns, downside, upside),
+        "downside_mean_return": None if exact_mean is None else float(exact_mean),
+        "downside_worst_return": min((float(returns[index]) for index in downside), default=None),
+        "downside_excess_over_cash_pp": None if exact_mean is None else float(100 * (exact_mean - cash_mean)),
+    }
+
+
+def compare(closes, calendar, candidates, holdings=None, *, allocation_comparison=False):
     selection_calendar = [day for day in calendar if day <= SELECTION_END]
     validation = [day for day in calendar if day > SELECTION_END]
     report = {
@@ -163,6 +261,10 @@ def compare(closes, calendar, candidates, holdings=None):
         "additional_defense": [],
         "status": "insufficient_data",
     }
+    if allocation_comparison:
+        del report["additional_defense"]
+        report["mode"] = "allocation_comparison"
+        report["selected_etfs"] = None
     holding_symbols = (HOLDING,) if holdings is None else tuple(holdings)
     if holdings is not None:
         del report["holding"]
@@ -194,9 +296,10 @@ def compare(closes, calendar, candidates, holdings=None):
         report["missing_selection_dates"] = missing_holding[HOLDING] if holdings is None else missing_holding
         return report
 
+    if allocation_comparison:
+        return compare_allocations(closes, selection, validation, selected, holdings, report)
     selection_returns = portfolio_returns(closes, selection, holdings)
-    ordered = sorted(selection_returns)
-    threshold = ordered[(len(ordered) - 1) // 10]
+    threshold = downside_threshold(selection_returns)
     report["downside_threshold"] = float(threshold)
     report["selection"] = compare_period(closes, selected, selection, threshold, selection_returns)
 

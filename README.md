@@ -67,4 +67,10 @@ JSON 결과에 후보별 선정 여부와 제외 사유, 기간, 입력 SHA-256,
 python -m downside --holdings NVDA=50 SPY=50 --candidates QQQ XLP XLU IEF SHY GLD UUP --end 2026-11-24
 ```
 
+[QP-3](https://marcel615.atlassian.net/browse/QP-3)의 별도 실험은 NVDA·SPY 각각 40%에 20% 가상 현금, 포트폴리오 ETF 하나 20%, 종목별 ETF 두 개 각 10%를 더한 조합을 비교한다. 선정 기간에서 고정한 ETF를 사용하며 같은 검증 급락일의 평균·최악 수익률, 누적 수익률과 최대 낙폭을 출력한다.
+
+```bash
+python -m downside --compare-allocations --candidates QQQ XLP XLU IEF SHY GLD UUP --end 2026-11-24
+```
+
 매 거래일 목표 비중으로 합산한 기준 포트폴리오 수익률로 급락일을 판단한다. 기존과 같은 비중으로 현금 또는 후보 ETF를 편입해 비교한다. JSON의 `holdings_percent`는 입력 비중을 문자열로 기록하며, `holding_only`는 기준 포트폴리오 전체의 성과를 담는다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/7d46cb83a9fe49af0cbababfe74c839951a90560/docs/analytics-spec.md#여러-보유-희망-종목의-하락-방어-후보-비교)
