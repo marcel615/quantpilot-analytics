@@ -1,7 +1,6 @@
 # Current Task
 
-- **작업과 착수 근거** — [QP-8](https://marcel615.atlassian.net/browse/QP-8) 진행 중. [QP-2](https://marcel615.atlassian.net/browse/QP-2)와 [QP-9](https://marcel615.atlassian.net/browse/QP-9) 완료.
-- **공식 원본** — Specs `main` SHA `9ca53e9ed4f327d0b293bf43709f09a273be09fd`의 [요구사항](https://github.com/marcel615/quantpilot-specs/blob/9ca53e9ed4f327d0b293bf43709f09a273be09fd/docs/requirements.md)과 [분석 명세](https://github.com/marcel615/quantpilot-specs/blob/9ca53e9ed4f327d0b293bf43709f09a273be09fd/docs/analytics-spec.md).
-- **목표와 범위** — NVDA·SPY의 2024년 정제 일봉을 메모리에서 사용해 다음 뉴욕 거래일의 배당 제외 수익률을 예측한다. 고정 시간순 구간, 학습 전용 전처리, 10월 설정 선택, 11–12월 동일 행 MAE 비교, 모델 재로딩을 구현한다.
-- **구현 방향** — 기존 수집·정제를 재사용하고, Python CLI와 NumPy의 선형 시스템 풀이로 오프라인 리지 회귀를 구현한다. 데이터 저장과 외부 서비스 계약 변경은 필요 없다. 테스트 명령 등록은 사용자가 승인했다.
-- **검증** — `python -m unittest discover -s tests -v`로 계산·경계·누출·모델 재사용을 확인하고, 승인된 IEX 표본으로 평가와 이후 거래일 예측을 검증한다.
+- **작업** [QP-1 보유 희망 종목 한 개의 하락 방어 후보 비교](https://marcel615.atlassian.net/browse/QP-1). 사용자가 2026-11-25 18:02 KST에 Jira를 착수 가능으로 전환했다. QP-2와 QP-5의 IEX 일봉 정제를 재사용하며 선행 QP-10은 완료됐다.
+- **공식 원본** Specs main `2974ead957829dadca8103b6f77bdde9b455474c`의 [요구사항](https://github.com/marcel615/quantpilot-specs/blob/2974ead957829dadca8103b6f77bdde9b455474c/docs/requirements.md)과 [분석 명세](https://github.com/marcel615/quantpilot-specs/blob/2974ead957829dadca8103b6f77bdde9b455474c/docs/analytics-spec.md).
+- **구현** 고정 후보 최대 10개와 NVDA의 USD 분할조정 일봉을 메모리에서 검증한다. 2016년 이후 공통 거래일부터 2025년 마지막 거래일까지 후보를 선별하고 NVDA 급락 경계를 계산한다. 2026년 검증에는 NVDA 단독, 현금 20%, 후보 20%를 각 거래일의 목표 비중으로 비교한다. 실행 결과에 기간, 입력 SHA-256, 후보별 품질·제외 사유와 지표를 남긴다.
+- **검증** 손계산, 거래일 누락, 경계 동률, 급락일 9일과 10일, 현금 차이 0, 최근 3년 음수 후보, 검증 데이터 누출, 입력 식별자 재현과 장 마감을 합성 입력에서 확인했다. 승인된 Alpaca 일봉으로 8개 후보의 수용 검증을 두 번 실행했고 입력 SHA-256과 전체 결과가 일치했다.
