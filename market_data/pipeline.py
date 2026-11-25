@@ -92,7 +92,7 @@ def bar_values(bar, context):
     return tuple(values)
 
 
-def collect_mode(get, query, zone, mode, expected):
+def collect_mode(get, query, zone, mode, expected, *, require_complete=True):
     values = {}
     bodies = []
     for body, bars in iter_bar_pages(get, query.symbols, query.start, query.end, zone, mode):
@@ -110,7 +110,7 @@ def collect_mode(get, query, zone, mode, expected):
                 if values.setdefault(key, row) != row:
                     raise DataError(f"{context}: conflicting duplicate")
     missing = expected - values.keys()
-    if missing:
+    if require_complete and missing:
         symbol, day = min(missing)
         raise DataError(f"{symbol} {day} {mode}: missing trading day ({len(missing)} total)")
     return values, bodies

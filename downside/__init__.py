@@ -1,0 +1,1 @@
+"""Single-holding downside comparison."""
