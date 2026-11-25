@@ -58,3 +58,13 @@ python -m downside --candidates SPY IEF GLD --end 2026-11-24
 2016년부터 조회하고 입력 종목의 공통 시작일부터 2025년 마지막 거래일까지 후보를 선별한다. NVDA의 하위 10% 급락 경계와 선정 후보를 2026년 거래일에 그대로 적용한다. 검증 첫날 수익률에는 2025년 마지막 거래일 종가를 사용한다. 수익률은 배당을 제외한 분할조정 종가로 계산한다. 매일 NVDA 단독, NVDA 80%·현금 20%, NVDA 80%·후보 20%를 비교하며 현금 수익률과 거래 비용은 0이다.
 
 JSON 결과에 후보별 선정 여부와 제외 사유, 기간, 입력 SHA-256, 급락일 표본 수, 조합별 누적 수익률·최대 낙폭·상승일과 급락일 평균을 표시한다. 수익률과 최대 낙폭은 소수로, 현금 대비 급락일 차이는 퍼센트포인트로 표시한다. 검증 급락일이 10일 이상일 때 현금 대비 차이가 양수인 후보를 집계한다. 필수 일봉을 확보하지 못하면 결과의 `status`에 `insufficient_data`가 표시되고 명령은 종료 코드 1을 반환한다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/2974ead957829dadca8103b6f77bdde9b455474c/docs/analytics-spec.md#보유-희망-종목-한-개의-하락-방어-후보-비교)
+
+## 여러 보유 희망 종목의 하락 방어 후보 비교
+
+[QP-11](https://marcel615.atlassian.net/browse/QP-11)은 두세 종목의 기준 포트폴리오를 지원한다. `--holdings`에 종목과 양의 비중을 합계 100으로 지정하고, 기준 종목과 겹치지 않는 후보 ETF를 입력한다. 다음은 첫 수용 검증 명령이다.
+
+```text
+python -m downside --holdings NVDA=50 SPY=50 --candidates QQQ XLP XLU IEF SHY GLD UUP --end 2026-11-24
+```
+
+매 거래일 목표 비중으로 합산한 기준 포트폴리오 수익률로 급락일을 판단한다. 기존과 같은 비중으로 현금 또는 후보 ETF를 편입해 비교한다. JSON의 `holdings_percent`는 입력 비중을 문자열로 기록하며, `holding_only`는 기준 포트폴리오 전체의 성과를 담는다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/7d46cb83a9fe49af0cbababfe74c839951a90560/docs/analytics-spec.md#여러-보유-희망-종목의-하락-방어-후보-비교)

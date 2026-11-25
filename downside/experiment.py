@@ -40,6 +40,20 @@ def daily_returns(prices, days):
             for previous, current in zip(days, days[1:])]
 
 
+def portfolio_returns(closes, days, holdings):
+    if holdings is None:
+        return daily_returns(closes[HOLDING], days)
+    components = [(closes[symbol], Fraction(weight) / 100)
+                  for symbol, weight in holdings.items()]
+    returns = []
+    for previous, current in zip(days, days[1:]):
+        # Keep offsetting contributions exact before testing sign or sorting.
+        weighted = sum(weight * (Fraction(prices[current]) / Fraction(prices[previous]) - 1)
+                       for prices, weight in components)
+        returns.append(weighted)
+    return returns
+
+
 def missing_dates(prices, days):
     return [day.isoformat() for day in days if day not in prices]
 
@@ -97,11 +111,12 @@ def allocation_metrics(returns, downside, upside):
     }
 
 
-def compare_period(closes, symbols, days, threshold):
-    holding = daily_returns(closes[HOLDING], days)
-    cash_mix = [HOLDING_WEIGHT * change for change in holding]
+def compare_period(closes, symbols, days, threshold, holding):
     downside = [index for index, change in enumerate(holding) if change < 0 and change <= threshold]
     upside = [index for index, change in enumerate(holding) if change > 0]
+    if isinstance(holding[0], Fraction):
+        holding = [Decimal(change.numerator) / Decimal(change.denominator) for change in holding]
+    cash_mix = [HOLDING_WEIGHT * change for change in holding]
     candidates = {}
     for symbol in symbols:
         candidate = daily_returns(closes[symbol], days)
@@ -121,7 +136,7 @@ def compare_period(closes, symbols, days, threshold):
     }
 
 
-def compare(closes, calendar, candidates):
+def compare(closes, calendar, candidates, holdings=None):
     selection_calendar = [day for day in calendar if day <= SELECTION_END]
     validation = [day for day in calendar if day > SELECTION_END]
     report = {
@@ -148,7 +163,11 @@ def compare(closes, calendar, candidates):
         "additional_defense": [],
         "status": "insufficient_data",
     }
-    symbols = (HOLDING, *candidates)
+    holding_symbols = (HOLDING,) if holdings is None else tuple(holdings)
+    if holdings is not None:
+        del report["holding"]
+        report["holdings_percent"] = {symbol: str(weight) for symbol, weight in holdings.items()}
+    symbols = (*holding_symbols, *candidates)
     first_days = {symbol: next((day for day in selection_calendar if day in closes[symbol]), None)
                   for symbol in symbols}
     absent = [symbol for symbol, day in first_days.items() if day is None]
@@ -168,26 +187,29 @@ def compare(closes, calendar, candidates):
     for symbol in candidates:
         report["candidates"][symbol] = screen_candidate(closes[symbol], selection, recent)
     selected = [symbol for symbol in candidates if report["candidates"][symbol]["selected"]]
-    missing_holding = missing_dates(closes[HOLDING], selection)
+    missing_holding = {symbol: missing_dates(closes[symbol], selection) for symbol in holding_symbols}
+    missing_holding = {symbol: dates for symbol, dates in missing_holding.items() if dates}
     if missing_holding:
         report["reason"] = "missing_holding_selection_prices"
-        report["missing_selection_dates"] = missing_holding
+        report["missing_selection_dates"] = missing_holding[HOLDING] if holdings is None else missing_holding
         return report
 
-    ordered = sorted(daily_returns(closes[HOLDING], selection))
+    selection_returns = portfolio_returns(closes, selection, holdings)
+    ordered = sorted(selection_returns)
     threshold = ordered[(len(ordered) - 1) // 10]
     report["downside_threshold"] = float(threshold)
-    report["selection"] = compare_period(closes, selected, selection, threshold)
+    report["selection"] = compare_period(closes, selected, selection, threshold, selection_returns)
 
     validation_with_anchor = [selection[-1], *validation]
     missing_validation = {symbol: missing_dates(closes[symbol], validation_with_anchor)
-                          for symbol in (HOLDING, *selected)}
+                          for symbol in (*holding_symbols, *selected)}
     report["missing_validation_dates"] = {symbol: days for symbol, days in missing_validation.items() if days}
     if report["missing_validation_dates"]:
         report["reason"] = "missing_validation_prices"
         return report
 
-    evaluation = compare_period(closes, selected, validation_with_anchor, threshold)
+    validation_returns = portfolio_returns(closes, validation_with_anchor, holdings)
+    evaluation = compare_period(closes, selected, validation_with_anchor, threshold, validation_returns)
     report["validation"] = evaluation
     sufficient_sample = evaluation["downside_days"] >= MIN_DOWNSIDE_DAYS
     report["validation_sample_sufficient"] = sufficient_sample

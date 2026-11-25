@@ -1,8 +1,9 @@
-"""Compare NVDA downside candidates using Alpaca Basic IEX daily bars."""
+"""Compare downside candidates using Alpaca Basic IEX daily bars."""
 
 import argparse
 from datetime import date, datetime, time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 import json
 import os
 import sys
@@ -30,7 +31,7 @@ def require_completed_session(calendar, day, now):
         raise DataError(f"{day}: session has not closed in New York")
 
 
-def run(get, query, now):
+def run(get, query, now, holdings=None):
     zone = ZoneInfo("America/New_York")
     _, calendar = fetch_calendar(get, query.start, query.end)
     days = sorted(trading_days(calendar, query))
@@ -46,7 +47,8 @@ def run(get, query, now):
     for (symbol, day), values in split.items():
         if (symbol, day) in raw:
             closes[symbol][day] = Decimal(values[OHLCV.index("close")])
-    candidates = tuple(symbol for symbol in query.symbols if symbol != HOLDING)
+    holding_symbols = (HOLDING,) if holdings is None else holdings
+    candidates = tuple(symbol for symbol in query.symbols if symbol not in holding_symbols)
     return {
         "input": {
             "source": "Alpaca Basic (Paper)",
@@ -58,35 +60,65 @@ def run(get, query, now):
             "observed_sessions": {symbol: len(prices) for symbol, prices in closes.items()},
             "sha256": input_digest(closes, days),
         },
-        **compare(closes, days, candidates),
+        **compare(closes, days, candidates, holdings),
     }
+
+
+def parse_holdings(values):
+    holdings = {}
+    if len(values) not in (2, 3):
+        raise DataError("provide two or three holdings as TICKER=PERCENT")
+    for value in values:
+        symbol, separator, percent = value.partition("=")
+        try:
+            weight = Decimal(percent)
+        except InvalidOperation:
+            raise DataError("provide holdings as TICKER=PERCENT") from None
+        if not separator or not symbol or symbol in holdings:
+            raise DataError("provide distinct holdings as TICKER=PERCENT")
+        if not weight.is_finite() or not 0 < weight < 100:
+            raise DataError("each holding must have a positive weight below 100%")
+        holdings[symbol] = weight
+    if sum(map(Fraction, holdings.values())) != 100:
+        raise DataError("holding weights must sum to 100%")
+    return holdings
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates", nargs="+", required=True, metavar="TICKER")
+    parser.add_argument("--holdings", nargs="+", metavar="TICKER=PERCENT",
+                        help="Two or three reference holdings. Omit to use NVDA as the reference.")
     parser.add_argument("--end", type=date.fromisoformat, required=True, metavar="YYYY-MM-DD",
                         help="Last completed New York trading session to evaluate in 2026.")
     args = parser.parse_args(argv)
-    if not 1 <= len(args.candidates) <= 10 or HOLDING in args.candidates:
-        parser.error("provide 1 to 10 candidates distinct from NVDA")
+    try:
+        holdings = parse_holdings(args.holdings) if args.holdings else None
+    except DataError as error:
+        parser.error(str(error))
+    holding_symbols = (HOLDING,) if holdings is None else tuple(holdings)
+    if not 1 <= len(args.candidates) <= 10 or set(holding_symbols).intersection(args.candidates):
+        parser.error("provide 1 to 10 candidates distinct from the reference holdings")
     if not SELECTION_END < args.end <= VALIDATION_END_LIMIT:
         parser.error("--end must be a 2026 trading date")
     try:
-        query = Query((HOLDING, *args.candidates), HISTORY_START, args.end)
+        query = Query((*holding_symbols, *args.candidates), HISTORY_START, args.end)
         client = Alpaca(os.getenv("APCA_API_KEY_ID"), os.getenv("APCA_API_SECRET_KEY"))
-        report = run(client.get, query, datetime.now().astimezone())
+        report = run(client.get, query, datetime.now().astimezone(), holdings)
     except ZoneInfoNotFoundError:
         print("Install tzdata to provide the America/New_York time zone.", file=sys.stderr)
         return 1
     except (DataError, OSError) as error:
-        print(json.dumps({
+        report = {
             "status": "insufficient_data",
             "reason": str(error),
             "requested_start": HISTORY_START.isoformat(),
             "requested_end": args.end.isoformat(),
             "input_candidates": args.candidates,
-        }, indent=2))
+        }
+        if holdings is not None:
+            report["holdings_percent"] = {symbol: str(weight) for symbol, weight in holdings.items()}
+        print(json.dumps(report, indent=2))
         return 1
     print(json.dumps(report, indent=2, allow_nan=False))
     return int(report["status"] == "insufficient_data")
