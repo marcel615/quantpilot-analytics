@@ -13,6 +13,7 @@ from market_data.alpaca import Alpaca, DataError, fetch_calendar
 from market_data.pipeline import OHLCV, Query, collect_mode, trading_days
 
 from .experiment import HOLDING, SELECTION_END, compare, input_digest
+from .holding_period import evaluate_holding_period
 from .weight_study import compare_weight_study_universes, evaluate_weight_study
 
 
@@ -40,7 +41,7 @@ def require_completed_session(calendar, day, now):
 
 
 def run(get, query, now, holdings=None, *, allocation_comparison=False, weight_study=False,
-        expanded_weight_study=False):
+        expanded_weight_study=False, holding_period_study=False):
     zone = ZoneInfo("America/New_York")
     _, calendar = fetch_calendar(get, query.start, query.end)
     days = sorted(trading_days(calendar, query))
@@ -61,6 +62,8 @@ def run(get, query, now, holdings=None, *, allocation_comparison=False, weight_s
     if expanded_weight_study:
         baseline = tuple(symbol for symbol in candidates if symbol in ALLOCATION_COMPARISON_CANDIDATES)
         evaluation = compare_weight_study_universes(closes, days, baseline, candidates)
+    elif holding_period_study:
+        evaluation = evaluate_holding_period(closes, days, candidates)
     elif weight_study:
         evaluation = evaluate_weight_study(closes, days, candidates)
     else:
@@ -114,10 +117,14 @@ def main(argv=None):
                        help="Evaluate the minimum defensive ETF weight for NVDA at two historical cutoffs.")
     modes.add_argument("--expanded-weight-study", action="store_true",
                        help="Compare the original and expanded fixed ETF universes for NVDA.")
+    modes.add_argument("--holding-period-study", action="store_true",
+                       help="Evaluate defensive ETF allocations over the full holding period.")
     args = parser.parse_args(argv)
-    if args.expanded_weight_study:
+    fixed_universe = args.expanded_weight_study or args.holding_period_study
+    if fixed_universe:
+        mode = "--holding-period-study" if args.holding_period_study else "--expanded-weight-study"
         if args.end != ALLOCATION_COMPARISON_END or args.candidates or args.holdings:
-            parser.error("--expanded-weight-study uses --end 2026-11-24 and a fixed NVDA and ETF universe")
+            parser.error(f"{mode} uses --end 2026-11-24 and a fixed NVDA and ETF universe")
         args.candidates = sorted(EXPANDED_WEIGHT_STUDY_CANDIDATES)
     elif not args.candidates:
         parser.error("the following arguments are required: --candidates")
@@ -137,7 +144,7 @@ def main(argv=None):
     if args.compare_allocations:
         holdings = {"NVDA": Decimal(50), "SPY": Decimal(50)}
     holding_symbols = (HOLDING,) if holdings is None else tuple(holdings)
-    if not args.expanded_weight_study and (
+    if not fixed_universe and (
         not 1 <= len(args.candidates) <= 10 or set(holding_symbols).intersection(args.candidates)
     ):
         parser.error("provide 1 to 10 candidates distinct from the reference holdings")
@@ -148,7 +155,8 @@ def main(argv=None):
         client = Alpaca(os.getenv("APCA_API_KEY_ID"), os.getenv("APCA_API_SECRET_KEY"))
         report = run(client.get, query, datetime.now().astimezone(), holdings,
                      allocation_comparison=args.compare_allocations, weight_study=args.weight_study,
-                     expanded_weight_study=args.expanded_weight_study)
+                     expanded_weight_study=args.expanded_weight_study,
+                     holding_period_study=args.holding_period_study)
     except ZoneInfoNotFoundError:
         print("Install tzdata to provide the America/New_York time zone.", file=sys.stderr)
         return 1

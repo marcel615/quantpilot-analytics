@@ -94,3 +94,13 @@ python -m downside --expanded-weight-study --end 2026-11-24
 ```
 
 JSON의 `baseline`과 `expanded`에 각 후보군의 시점별 선정·검증 결과와 제외 사유가 담긴다. 두 후보군은 같은 규칙으로 공통 선정 시작일을 각각 계산한다. `comparisons`에서 시작일 차이를 확인할 수 있다. 조회한 가격은 메모리에서 처리한다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/1202d3bd9d1a0eb82332e67acc1f208b16dc51ad/docs/analytics-spec.md#방어-etf-후보군-확대-비교)
+
+## 전체 보유 기간 기준 방어 ETF 재평가
+
+QP-16은 QP-6의 ETF 35개와 두 검증 구간에서 급락일 기준 대신 전체 거래일의 누적 주가 수익률과 최대 낙폭으로 후보를 선정한다.
+
+```powershell
+python -m downside --holding-period-study --end 2026-11-24
+```
+
+`windows`에 기간, ETF·비중별 선정 지표, 선택 결과와 고정된 이후 구간의 조합별 성과가 나온다. 급락일 지표와 표본 충족 여부도 표시한다.
