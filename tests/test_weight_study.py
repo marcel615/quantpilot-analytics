@@ -1,11 +1,12 @@
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
 import unittest
+from unittest.mock import patch
 
 from downside.__main__ import main
-from downside.weight_study import evaluate_weight_study
+from downside.weight_study import compare_weight_study_universes, evaluate_weight_study
 
 
 def make_prices(days, returns):
@@ -97,3 +98,42 @@ class WeightStudyTests(unittest.TestCase):
             main(["--weight-study", "--candidates", "QQQ", "--end", "2026-11-24"])
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("--weight-study uses --end 2026-11-24 and candidates", stderr.getvalue())
+
+    def test_expanded_universe_preserves_baseline_and_reports_its_own_start(self):
+        closes, days = sample()
+        closes["LATE"] = make_prices(days[1:], ["0.02"] * 20)
+        baseline = evaluate_weight_study(closes, days, ("AAA", "BBB"))
+        report = compare_weight_study_universes(closes, days, ("AAA", "BBB"), ("AAA", "BBB", "LATE"))
+
+        self.assertEqual(report["baseline"], baseline)
+        self.assertEqual(report["expanded"]["windows"]["2025"]["status"], "insufficient_sample")
+        self.assertEqual(report["expanded"]["windows"]["2026"]["selected"]["symbol"], "BBB")
+        self.assertEqual(report["comparisons"], {
+            "2025": {"selection_start_differs": True},
+            "2026": {"selection_start_differs": True},
+        })
+
+    def test_expanded_cli_uses_the_fixed_universe_and_single_run(self):
+        with patch("downside.__main__.Alpaca"), patch("downside.__main__.run") as run:
+            run.return_value = {"status": "comparison_complete"}
+            with redirect_stdout(StringIO()):
+                exit_code = main(["--expanded-weight-study", "--end", "2026-11-24"])
+
+        self.assertEqual(exit_code, 0)
+        run.assert_called_once()
+        _, query, _, holdings = run.call_args.args
+        self.assertEqual(len(query.symbols), 36)
+        self.assertTrue({"NVDA", "QQQ", "XLP", "XLU", "IEF", "SHY", "GLD", "UUP", "TLT"} <= set(query.symbols))
+        self.assertEqual(query.end, date(2026, 11, 24))
+        self.assertIsNone(holdings)
+        self.assertTrue(run.call_args.kwargs["expanded_weight_study"])
+
+    def test_expanded_cli_rejects_a_custom_universe_and_end_date(self):
+        for overrides in (
+            ["--end", "2026-11-24", "--candidates", "QQQ"],
+            ["--end", "2026-11-23"],
+        ):
+            with self.subTest(overrides=overrides), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["--expanded-weight-study", *overrides])
+                self.assertEqual(raised.exception.code, 2)

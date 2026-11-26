@@ -84,3 +84,13 @@ python -m downside --weight-study --candidates QQQ XLP XLU IEF SHY GLD UUP --end
 ```
 
 JSON의 `windows`에는 기간별 선택과 검증 상태, 급락일 표본 수, 기준·현금·ETF 조합의 성과가 담긴다. 적합 후보가 없으면 NVDA 기준 성과만 표시한다. `validation_target_met`은 평가에 충분한 표본이 있을 때 목표 달성 여부를 나타낸다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/4b98783213447210368a591b4ea2a0cd1b910837/docs/analytics-spec.md#방어-etf와-최소-편입-비중의-시점별-검증)
+
+### 방어 ETF 후보군 확대 비교
+
+[QP-6](https://marcel615.atlassian.net/browse/QP-6)은 동일한 IEX 조회를 사용해 기존 ETF 7개와 이를 포함한 고정 후보 35개를 각각 평가한다.
+
+```text
+python -m downside --expanded-weight-study --end 2026-11-24
+```
+
+JSON의 `baseline`과 `expanded`에 각 후보군의 시점별 선정·검증 결과와 제외 사유가 담긴다. 두 후보군은 같은 규칙으로 공통 선정 시작일을 각각 계산한다. `comparisons`에서 시작일 차이를 확인할 수 있다. 조회한 가격은 메모리에서 처리한다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/1202d3bd9d1a0eb82332e67acc1f208b16dc51ad/docs/analytics-spec.md#방어-etf-후보군-확대-비교)
