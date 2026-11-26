@@ -43,6 +43,28 @@ def evaluate_weight_study(closes, calendar, candidates):
     }
 
 
+def compare_weight_study_universes(closes, calendar, baseline_candidates, expanded_candidates):
+    baseline = evaluate_weight_study(closes, calendar, baseline_candidates)
+    expanded = evaluate_weight_study(closes, calendar, expanded_candidates)
+    comparisons = {}
+    for year, baseline_window in baseline["windows"].items():
+        baseline_start = baseline_window["selection_start"]
+        expanded_start = expanded["windows"][year]["selection_start"]
+        comparisons[year] = {
+            "selection_start_differs": (
+                baseline_start != expanded_start if baseline_start and expanded_start else None
+            ),
+        }
+    return {
+        "mode": "expanded_weight_study",
+        "baseline": baseline,
+        "expanded": expanded,
+        "comparisons": comparisons,
+        "status": ("insufficient_data" if "insufficient_data" in (baseline["status"], expanded["status"])
+                   else "comparison_complete"),
+    }
+
+
 def evaluate_window(closes, selection, validation, candidates):
     report = {
         "status": "insufficient_data",
