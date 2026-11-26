@@ -13,6 +13,7 @@ from market_data.alpaca import Alpaca, DataError, fetch_calendar
 from market_data.pipeline import OHLCV, Query, collect_mode, trading_days
 
 from .experiment import HOLDING, SELECTION_END, compare, input_digest
+from .weight_study import evaluate_weight_study
 
 
 HISTORY_START = date(2016, 1, 1)
@@ -33,7 +34,7 @@ def require_completed_session(calendar, day, now):
         raise DataError(f"{day}: session has not closed in New York")
 
 
-def run(get, query, now, holdings=None, *, allocation_comparison=False):
+def run(get, query, now, holdings=None, *, allocation_comparison=False, weight_study=False):
     zone = ZoneInfo("America/New_York")
     _, calendar = fetch_calendar(get, query.start, query.end)
     days = sorted(trading_days(calendar, query))
@@ -51,6 +52,10 @@ def run(get, query, now, holdings=None, *, allocation_comparison=False):
             closes[symbol][day] = Decimal(values[OHLCV.index("close")])
     holding_symbols = (HOLDING,) if holdings is None else holdings
     candidates = tuple(symbol for symbol in query.symbols if symbol not in holding_symbols)
+    evaluation = (
+        evaluate_weight_study(closes, days, candidates) if weight_study else
+        compare(closes, days, candidates, holdings, allocation_comparison=allocation_comparison)
+    )
     return {
         "input": {
             "source": "Alpaca Basic (Paper)",
@@ -62,7 +67,7 @@ def run(get, query, now, holdings=None, *, allocation_comparison=False):
             "observed_sessions": {symbol: len(prices) for symbol, prices in closes.items()},
             "sha256": input_digest(closes, days),
         },
-        **compare(closes, days, candidates, holdings, allocation_comparison=allocation_comparison),
+        **evaluation,
     }
 
 
@@ -93,16 +98,21 @@ def main(argv=None):
                         help="Two or three reference holdings. Omit to use NVDA as the reference.")
     parser.add_argument("--end", type=date.fromisoformat, required=True, metavar="YYYY-MM-DD",
                         help="Last completed New York trading session to evaluate in 2026.")
-    parser.add_argument("--compare-allocations", action="store_true",
-                        help="Compare NVDA/SPY with cash, one portfolio ETF and two individual ETFs.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--compare-allocations", action="store_true",
+                       help="Compare NVDA/SPY with cash, one portfolio ETF and two individual ETFs.")
+    modes.add_argument("--weight-study", action="store_true",
+                       help="Evaluate the minimum defensive ETF weight for NVDA at two historical cutoffs.")
     args = parser.parse_args(argv)
-    if args.compare_allocations:
+    if args.compare_allocations or args.weight_study:
+        mode = "--weight-study" if args.weight_study else "--compare-allocations"
         if args.holdings:
-            parser.error("--compare-allocations uses NVDA=50 SPY=50; omit --holdings")
+            reference = HOLDING if args.weight_study else "NVDA=50 SPY=50"
+            parser.error(f"{mode} uses {reference}; omit --holdings")
         if (args.end != ALLOCATION_COMPARISON_END
                 or len(args.candidates) != len(ALLOCATION_COMPARISON_CANDIDATES)
                 or set(args.candidates) != ALLOCATION_COMPARISON_CANDIDATES):
-            parser.error("--compare-allocations uses --end 2026-11-24 and candidates QQQ XLP XLU IEF SHY GLD UUP")
+            parser.error(f"{mode} uses --end 2026-11-24 and candidates QQQ XLP XLU IEF SHY GLD UUP")
     try:
         holdings = parse_holdings(args.holdings) if args.holdings else None
     except DataError as error:
@@ -118,7 +128,7 @@ def main(argv=None):
         query = Query((*holding_symbols, *args.candidates), HISTORY_START, args.end)
         client = Alpaca(os.getenv("APCA_API_KEY_ID"), os.getenv("APCA_API_SECRET_KEY"))
         report = run(client.get, query, datetime.now().astimezone(), holdings,
-                     allocation_comparison=args.compare_allocations)
+                     allocation_comparison=args.compare_allocations, weight_study=args.weight_study)
     except ZoneInfoNotFoundError:
         print("Install tzdata to provide the America/New_York time zone.", file=sys.stderr)
         return 1
