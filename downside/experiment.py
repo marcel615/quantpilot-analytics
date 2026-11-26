@@ -225,13 +225,17 @@ def add_etfs(cash, closes, days, symbols):
 def comparison_metrics(returns, cash, downside, upside):
     decimal_returns = [Decimal(value.numerator) / Decimal(value.denominator) for value in returns]
     exact_mean = average_on(returns, downside)
-    cash_mean = average_on(cash, downside)
-    return {
+    metrics = {
         **allocation_metrics(decimal_returns, downside, upside),
         "downside_mean_return": None if exact_mean is None else float(exact_mean),
         "downside_worst_return": min((float(returns[index]) for index in downside), default=None),
-        "downside_excess_over_cash_pp": None if exact_mean is None else float(100 * (exact_mean - cash_mean)),
     }
+    if cash is not None:
+        cash_mean = average_on(cash, downside)
+        metrics["downside_excess_over_cash_pp"] = (
+            None if exact_mean is None else float(100 * (exact_mean - cash_mean))
+        )
+    return metrics
 
 
 def compare(closes, calendar, candidates, holdings=None, *, allocation_comparison=False):

@@ -74,3 +74,13 @@ python -m downside --compare-allocations --candidates QQQ XLP XLU IEF SHY GLD UU
 ```
 
 매 거래일 목표 비중으로 합산한 기준 포트폴리오 수익률로 급락일을 판단한다. 기존과 같은 비중으로 현금 또는 후보 ETF를 편입해 비교한다. JSON의 `holdings_percent`는 입력 비중을 문자열로 기록하며, `holding_only`는 기준 포트폴리오 전체의 성과를 담는다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/7d46cb83a9fe49af0cbababfe74c839951a90560/docs/analytics-spec.md#여러-보유-희망-종목의-하락-방어-후보-비교)
+
+### 방어 ETF와 최소 편입 비중의 시점별 검증
+
+[QP-4](https://marcel615.atlassian.net/browse/QP-4)는 NVDA와 고정 ETF 후보 7개로 2025년과 2026년의 검증 결과를 따로 출력한다. 앞선 연말까지의 자료에서 현금 대비 급락일 평균 수익률을 0.10%p 이상 개선하는 최소 ETF 비중(10%, 15%, 20%)을 찾고, 각 검증 기간에 선택을 고정한다.
+
+```text
+python -m downside --weight-study --candidates QQQ XLP XLU IEF SHY GLD UUP --end 2026-11-24
+```
+
+JSON의 `windows`에는 기간별 선택과 검증 상태, 급락일 표본 수, 기준·현금·ETF 조합의 성과가 담긴다. 적합 후보가 없으면 NVDA 기준 성과만 표시한다. `validation_target_met`은 평가에 충분한 표본이 있을 때 목표 달성 여부를 나타낸다. [공식 분석 명세](https://github.com/marcel615/quantpilot-specs/blob/4b98783213447210368a591b4ea2a0cd1b910837/docs/analytics-spec.md#방어-etf와-최소-편입-비중의-시점별-검증)
